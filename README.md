@@ -1,2 +1,2 @@
 # EasyCalc
-EasyCalc is a simple calculator in Python
+EasyCalc is a simple calculator in Python use CustomTkinter
