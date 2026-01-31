@@ -1,113 +1,96 @@
+# Copyright (C) 2026 bo7dan
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# LICENSE file for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import customtkinter as ctk
 import re
 
-LICENSE_TEXT = """\
-                      GNU GENERAL PUBLIC LICENSE
-                         Version 3, 29 June 2007
-
- Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
- Everyone is permitted to copy and distribute verbatim copies
- of this license document, but changing it is not allowed.
-
-                            Preamble
-
- The GNU General Public License is a free, copyleft license for
- software and other kinds of works.
-
- The licenses for most software and other practical works are designed to
- take away your freedom to share and change the works. By contrast,
- the GNU General Public License is intended to guarantee your freedom to
- share and change all versions of a program--to make sure it remains free
- software for all its users. We, the Free Software Foundation, use the
- GNU General Public License for most of our software; it applies also to
- any other work released this way by its authors. You can apply it to
- your programs, too.
-
- When we speak of free software, we are referring to freedom, not price.
- ...
-"""
-
+# -------------------- Calculator Logic --------------------
 class CalculatorLogic:
     def __init__(self):
         self.reset()
 
-    def reset(self):
+    def reset(self) -> None:
         self.expression = "0"
-
-    def set_expression(self, expr: str):
-        self.expression = expr
 
     def get_expression(self) -> str:
         return self.expression
 
-    def add_digit(self, digit: str):
+    def add_digit(self, digit: str) -> None:
         if self.expression in ("0", "Error"):
             self.expression = digit
         else:
             self.expression += digit
 
-    def add_operator(self, operator: str):
+    def add_operator(self, operator: str) -> None:
         if self.expression == "Error":
             return
 
-        op = ""
-        if operator == "÷":
-            op = "/"
-        elif operator == "×":
-            op = "*"
-        else:
-            op = operator
-
-        if self.expression.endswith(("+", "-", "*", "/", "%")):
+        op = {"÷": "/", "×": "*", "+": "+", "-": "-", "%": "%"}.get(operator, operator)
+        if self.expression[-1:] in "+-*/%":
             self.expression = self.expression[:-1] + op
         else:
             self.expression += op
 
-    def add_decimal(self):
+    def add_decimal(self) -> None:
         if self.expression == "Error":
             return
-        
         parts = re.split(r'[-+*/%]', self.expression)
         if "." not in parts[-1]:
             self.expression += "."
 
-    def toggle_sign(self):
+    def toggle_sign(self) -> None:
         if self.expression == "Error":
             return
-        if self.expression.startswith("-"):
-            self.expression = self.expression[1:]
-        else:
-            self.expression = "-" + self.expression
+        match = re.search(r'(\d+\.?\d*)$', self.expression)
+        if match:
+            number = match.group(1)
+            start = match.start(1)
+            if number.startswith("-"):
+                self.expression = self.expression[:start] + number[1:]
+            else:
+                self.expression = self.expression[:start] + "-" + number
 
-    def add_parentheses(self):
+    def add_parentheses(self) -> None:
         if self.expression == "Error":
             return
-        if self.expression == "0":
-            self.expression = "()"
-        elif self.expression and (self.expression[-1].isdigit() or self.expression[-1] == ")"):
-            self.expression += "*()"
+        open_count = self.expression.count("(")
+        close_count = self.expression.count(")")
+        if open_count == close_count or self.expression[-1] in "+-*/%(":
+            self.expression += "("
+        elif open_count > close_count and (self.expression[-1].isdigit() or self.expression[-1] == ")"):
+            self.expression += ")"
         else:
-            self.expression += "()"
+            self.expression += "("
 
-    def clear(self):
+    def clear(self) -> None:
         self.reset()
 
-    def calculate(self):
+    def calculate(self) -> None:
         try:
             expr = self.expression.replace("×", "*").replace("÷", "/").replace("%", "/100*")
             if not re.match(r'^[+\-*/()%.\d\s]+$', expr):
                 raise ValueError("Invalid characters")
             result = eval(expr, {"__builtins__": None}, {})
-            if isinstance(result, float) and result == int(result):
+            if isinstance(result, float) and result.is_integer():
                 self.expression = str(int(result))
             else:
                 self.expression = str(result)
-                
-        except (ZeroDivisionError, ValueError, TypeError):
-            self.expression = "Error"
         except Exception:
             self.expression = "Error"
 
+# -------------------- Display --------------------
 class Display:
     def __init__(self, master, initial="0"):
         self.var = ctk.StringVar(value=initial)
@@ -131,12 +114,18 @@ class Display:
     def get(self) -> str:
         return self.var.get()
 
+# -------------------- Button Grid --------------------
 class ButtonGrid:
+    COLORS = {
+        "digit": "#2E2E2E",
+        "operator": "#FF9800",
+        "hover": "#3E3E3E",
+        "clear": "#FF5252"
+    }
+
     def __init__(self, master, command_mapper):
-        self.master = master
         self.frame = ctk.CTkFrame(master, fg_color="transparent")
         self.command_mapper = command_mapper
-        self.buttons = []
         self._create_buttons()
         self._layout_buttons()
 
@@ -152,22 +141,24 @@ class ButtonGrid:
             "border_width": 0,
             "text_color": "#FFFFFF"
         }
-        
+
         specs = [
-            ("C", "#FF5252", "#FF8A80"), ("()", "#2E2E2E", "#3E3E3E"), ("%", "#2E2E2E", "#3E3E3E"), ("÷", "#FF9800", "#FFB74D"),
-            ("7", "#2E2E2E", "#3E3E3E"), ("8", "#2E2E2E", "#3E3E3E"), ("9", "#2E2E2E", "#3E3E3E"), ("×", "#FF9800", "#FFB74D"),
-            ("4", "#2E2E2E", "#3E3E3E"), ("5", "#2E2E2E", "#3E3E3E"), ("6", "#2E2E2E", "#3E3E3E"), ("-", "#FF9800", "#FFB74D"),
-            ("1", "#2E2E2E", "#3E3E3E"), ("2", "#2E2E2E", "#3E3E3E"), ("3", "#2E2E2E", "#3E3E3E"), ("+", "#FF9800", "#FFB74D"),
-            ("±", "#2E2E2E", "#3E3E3E"), ("0", "#2E2E2E", "#3E3E3E"), (".", "#2E2E2E", "#3E3E3E"), ("=", "#FF9800", "#FFB74D"),
+            ("C", "clear"), ("()", "digit"), ("%", "operator"), ("÷", "operator"),
+            ("7", "digit"), ("8", "digit"), ("9", "digit"), ("×", "operator"),
+            ("4", "digit"), ("5", "digit"), ("6", "digit"), ("-", "operator"),
+            ("1", "digit"), ("2", "digit"), ("3", "digit"), ("+", "operator"),
+            ("±", "digit"), ("0", "digit"), (".", "digit"), ("=", "operator")
         ]
 
-        for text, bg_color, hover_color in specs:
+        self.buttons = []
+        for text, typ in specs:
+            color = self.COLORS.get(typ, "#2E2E2E")
             btn = ctk.CTkButton(
                 self.frame,
                 text=text,
-                command=self.command_mapper(text),
-                fg_color=bg_color,
-                hover_color=hover_color,
+                fg_color=color,
+                hover_color=self.COLORS["hover"],
+                command=lambda t=text: self.command_mapper(t)(),
                 **button_config
             )
             self.buttons.append(btn)
@@ -180,79 +171,63 @@ class ButtonGrid:
             self.frame.grid_columnconfigure(col, weight=1)
             self.frame.grid_rowconfigure(row, weight=1)
 
+# -------------------- Calculator App --------------------
 class CalculatorApp:
     def __init__(self, root):
         self.root = root
         self.logic = CalculatorLogic()
-        self.setup_appearance()
-        self.create_widgets()
-        self.setup_layout()
+        self._setup_appearance()
+        self._create_widgets()
+        self._setup_layout()
 
-    def setup_appearance(self):
+    def _setup_appearance(self):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("green")
         self.root.title("EasyCalc")
-        self.root.geometry("450x450")
-        self.root.resizable(True, True)
+        self.root.geometry("450x550")
+        self.root.minsize(400, 500)
         self.root.configure(fg_color="#1E1E1E")
 
-    def create_widgets(self):
+    def _create_widgets(self):
         self.display = Display(self.root)
-        self.button_grid = ButtonGrid(self.root, self.map_commands)
+        self.button_grid = ButtonGrid(self.root, self._map_commands)
 
-    def setup_layout(self):
+    def _setup_layout(self):
         self.display.pack(pady=(30, 20), padx=20, fill="x")
         self.button_grid.pack(padx=10, pady=10, fill="both", expand=True)
 
     def _update_display(self):
         expr = self.logic.get_expression()
-        if len(expr) > 20 and "." not in expr:
-             self.display.set(f"{float(expr):.2e}")
+        if len(expr) > 12:
+            try:
+                self.display.set(f"{float(expr):.8g}")
+            except:
+                self.display.set(expr)
         else:
-             self.display.set(expr)
+            self.display.set(expr)
 
-    def map_commands(self, label: str):
-
-        def command_wrapper(logic_method, *args):
-            logic_method(*args)
-            self._update_display() 
-
+    def _map_commands(self, label: str):
+        command_map = {
+            "C": self.logic.clear,
+            "=": self.logic.calculate,
+            "±": self.logic.toggle_sign,
+            "()": self.logic.add_parentheses,
+            ".": self.logic.add_decimal,
+            "+": lambda: self.logic.add_operator("+"),
+            "-": lambda: self.logic.add_operator("-"),
+            "×": lambda: self.logic.add_operator("×"),
+            "÷": lambda: self.logic.add_operator("÷"),
+            "%": lambda: self.logic.add_operator("%"),
+        }
         if label.isdigit():
-            return lambda: command_wrapper(self.logic.add_digit, label)
-        if label in ("+", "-", "×", "÷", "%"):
-            return lambda: command_wrapper(self.logic.add_operator, label)
-        if label == ".":
-            return lambda: command_wrapper(self.logic.add_decimal)
-        if label == "C":
-            return lambda: command_wrapper(self.logic.clear)
-        if label == "=":
-            return lambda: command_wrapper(self.logic.calculate)
-        if label == "±":
-            return lambda: command_wrapper(self.logic.toggle_sign)
-        if label == "()":
-            return lambda: command_wrapper(self.logic.add_parentheses)
-        
-        return lambda: None
+            return lambda: self._execute(self.logic.add_digit, label)
+        return lambda: self._execute(command_map.get(label, lambda: None))
 
-def show_license():
-    license_root = ctk.CTk()
-    license_root.title("license agreement")
-    license_root.geometry("600x400")
-    license_root.configure(fg_color="#1E1E1E")
-    text_area = ctk.CTkTextbox(license_root, wrap="word", font=("Arial", 12))
-    text_area.insert("end", LICENSE_TEXT)
-    text_area.configure(state="disabled")
-    text_area.pack(padx=20, pady=20, fill="both", expand=True)
+    def _execute(self, func, *args):
+        func(*args)
+        self._update_display()
 
-    def close_license():
-        license_root.destroy()
-        start_app()
-
-    ok_button = ctk.CTkButton(license_root, text="OK", command=close_license)
-    ok_button.pack(pady=(0, 20))
-    license_root.protocol("WM_DELETE_WINDOW", close_license)
-    license_root.mainloop()
-
+# -------------------- Start App --------------------
 def start_app():
     root = ctk.CTk()
     app = CalculatorApp(root)
@@ -260,4 +235,4 @@ def start_app():
 
 
 if __name__ == "__main__":
-    show_license()
+    start_app()
